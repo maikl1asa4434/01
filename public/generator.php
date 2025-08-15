@@ -14,11 +14,10 @@ try {
     $error_message = "Could not fetch groups: " . $e->getMessage();
 }
 
-// Determine the base URL for the gate endpoint
-$protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
+// Determine the base URL for the gate endpoint. Use https.
+$protocol = 'https';
 $host = $_SERVER['HTTP_HOST'];
 $path = dirname($_SERVER['PHP_SELF']);
-// Ensure path is clean, replacing backslashes and removing trailing slash if it's not the root
 $path = rtrim(str_replace('\\', '/', $path), '/');
 $gateUrl = "{$protocol}://{$host}{$path}/gate.php";
 
@@ -41,7 +40,7 @@ require_once __DIR__ . '/../app/partials/header.php';
     }
     #script-output {
         width: 100%;
-        height: 300px;
+        height: 400px;
         margin-top: 1rem;
         font-family: monospace;
         font-size: 0.9rem;
@@ -130,39 +129,42 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     function generateScript(groupId, gateUrl) {
-        return `# PowerShell Check-in Script
-# Generated on ${new Date().toISOString()}
+        // This is the new, robust script template
+        return `try {
+    # Force PowerShell to use the modern TLS 1.2 security protocol
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 
-# --- CONFIGURATION ---
-$GroupId = "${groupId}"
-$GateUrl = "${gateUrl}"
+    # --- Define Configuration ---
+    $GroupId = "${groupId}"
+    $GateUrl = "${gateUrl}"
 
-# --- SCRIPT ---
-try {
-    # Get unique hardware ID from the motherboard serial number
+    # --- Gather Information ---
     $Hwid = (Get-CimInstance Win32_BaseBoard).SerialNumber.Trim()
-
-    # Get the computer name
     $ComputerName = $env:COMPUTERNAME
 
-    # Prepare the data payload
+    # --- Prepare Request ---
     $payload = @{
         group_id      = $GroupId
         hwid          = $Hwid
         computer_name = $ComputerName
     }
 
-    # Send the data to the gate endpoint
-    Invoke-RestMethod -Uri $GateUrl -Method Post -Body $payload
+    $headers = @{
+        "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36"
+    }
 
-    # Write-Host "Check-in successful for group $GroupId"
+    # Write-Host "Sending POST request to $GateUrl" # Optional: for debugging
+
+    # --- Send Data ---
+    Invoke-RestMethod -Uri $GateUrl -Method Post -Headers $headers -Body $payload
+
+    # Write-Host "Check-in successful!" # Optional: for debugging
 }
 catch {
-    # You can add error logging here if needed, for example:
-    # "[$($_.Exception.GetType().FullName)] - $($_.Exception.Message)" | Out-File -FilePath "C:\\path\\to\\error.log" -Append
-    # Write-Host "An error occurred during check-in: $_"
-}
-`;
+    # In a scheduled task, you might want to log errors to a file instead of the console.
+    # For example:
+    # "$([System.DateTime]::UtcNow.ToString('u')) - $($_.Exception.Message)" | Out-File -FilePath "C:\\path\\to\\error.log" -Append
+}`;
     }
 });
 </script>

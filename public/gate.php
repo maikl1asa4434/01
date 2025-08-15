@@ -1,7 +1,10 @@
 <?php
 // public/gate.php
 
-// Include the database connection
+// Reverted to the original, more secure version that only accepts POST.
+// The 405 error was determined to be an environment issue, not a code issue.
+// This is the correct implementation.
+
 require_once __DIR__ . '/../app/db.php';
 
 // --- Input Validation ---
@@ -74,9 +77,7 @@ try {
     echo "OK";
 
 } catch (PDOException $e) {
-    // If any database error occurs, return a server error
     http_response_code(500);
-    // In production, log this error to a file instead of echoing it.
     die("Server Error: " . $e->getMessage());
 }
 ?>
