@@ -40,7 +40,7 @@ require_once __DIR__ . '/../app/partials/header.php';
     }
     #script-output {
         width: 100%;
-        height: 400px;
+        height: 500px;
         margin-top: 1rem;
         font-family: monospace;
         font-size: 0.9rem;
@@ -134,31 +134,55 @@ document.addEventListener('DOMContentLoaded', function() {
     # Force PowerShell to use the modern TLS 1.2 security protocol
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 
-    # --- Define Configuration ---
+    # --- Configuration ---
     $GroupId = "${groupId}"
     $GateUrl = "${gateUrl}"
 
-    # --- Gather Information ---
-    $Hwid = (Get-CimInstance Win32_BaseBoard).SerialNumber.Trim()
-    $ComputerName = $env:COMPUTERNAME
+    # --- HWID Gathering with Fallback ---
+    $Hwid = ""
+    try {
+        # Primary Method: Motherboard Serial Number
+        $Hwid = (Get-CimInstance Win32_BaseBoard).SerialNumber.Trim()
+    } catch {}
 
-    # --- Prepare Request ---
+    if ([string]::IsNullOrWhiteSpace($Hwid)) {
+        try {
+            # Fallback Method: MAC Address of the first active, physical network adapter
+            $adapter = Get-CimInstance Win32_NetworkAdapter | Where-Object { $_.NetConnectionStatus -eq 2 -and $_.PhysicalAdapter -eq $true } | Select-Object -First 1
+            if ($adapter) {
+                $Hwid = $adapter.MACAddress
+            }
+        } catch {}
+    }
+
+    # If HWID is still not found, script cannot proceed.
+    if ([string]::IsNullOrWhiteSpace($Hwid)) {
+        # In a real deployment, you might log this to a file.
+        # Write-Error "FATAL: Could not determine a unique Hardware ID for this machine."
+        return
+    }
+
+    # --- Computer Name Gathering with Fallback ---
+    $ComputerName = $env:COMPUTERNAME
+    if ([string]::IsNullOrWhiteSpace($ComputerName)) {
+        $ComputerName = "Unknown-Computer"
+    }
+
+    # --- Prepare JSON Payload ---
+    # Using JSON ensures special characters (e.g., non-English names) are handled correctly.
     $payload = @{
         group_id      = $GroupId
         hwid          = $Hwid
         computer_name = $ComputerName
-    }
+    } | ConvertTo-Json -Compress
 
     $headers = @{
         "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36"
     }
 
-    # Write-Host "Sending POST request to $GateUrl" # Optional: for debugging
-
     # --- Send Data ---
-    Invoke-RestMethod -Uri $GateUrl -Method Post -Headers $headers -Body $payload
+    Invoke-RestMethod -Uri $GateUrl -Method Post -Headers $headers -Body $payload -ContentType 'application/json; charset=utf-8'
 
-    # Write-Host "Check-in successful!" # Optional: for debugging
 }
 catch {
     # In a scheduled task, you might want to log errors to a file instead of the console.

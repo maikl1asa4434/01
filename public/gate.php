@@ -1,10 +1,6 @@
 <?php
 // public/gate.php
 
-// Reverted to the original, more secure version that only accepts POST.
-// The 405 error was determined to be an environment issue, not a code issue.
-// This is the correct implementation.
-
 require_once __DIR__ . '/../app/db.php';
 
 // --- Input Validation ---
@@ -15,10 +11,20 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     die("Method Not Allowed");
 }
 
-// Get POST data
-$group_id = isset($_POST['group_id']) ? trim($_POST['group_id']) : '';
-$hwid = isset($_POST['hwid']) ? trim($_POST['hwid']) : '';
-$computer_name = isset($_POST['computer_name']) ? trim($_POST['computer_name']) : '';
+// Get raw POST data and decode it from JSON to properly handle UTF-8 characters
+$json_data = file_get_contents('php://input');
+$data = json_decode($json_data, true);
+
+// Check for JSON decoding errors
+if (json_last_error() !== JSON_ERROR_NONE) {
+    http_response_code(400); // Bad Request
+    die("Bad Request: Invalid JSON payload.");
+}
+
+// Get data from the decoded JSON array
+$group_id = isset($data['group_id']) ? trim((string)$data['group_id']) : '';
+$hwid = isset($data['hwid']) ? trim((string)$data['hwid']) : '';
+$computer_name = isset($data['computer_name']) ? trim((string)$data['computer_name']) : '';
 
 // Basic validation: ensure required fields are not empty
 if (empty($group_id) || empty($hwid)) {
